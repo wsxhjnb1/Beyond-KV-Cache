@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beyond-cute"
+version = "0.1.0"
+description = "Packed 4-bit/G32 KV-cache operators and SM103 decode runtime"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Yuhao Xie" },
+  { name = "Mingjie Lin" },
+]
+dependencies = [
+  "torch>=2.11.0",
+  "nvidia-cutlass-dsl==4.4.2",
+  "apache-tvm-ffi==0.1.9",
+  "torch-c-dlpack-ext==0.1.5",
+]
+
+[project.urls]
+Repository = "https://github.com/wsxhjnb1/Beyond-KV-Cache"
+
+[tool.setuptools]
+packages = ["quant", "quant.fa4_cute"]
+package-dir = { "quant" = ".", "quant.fa4_cute" = "fa4_cute" }
+
+[tool.setuptools.package-data]
+"quant.fa4_cute" = ["AUTHORS", "LICENSE"]

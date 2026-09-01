@@ -1,0 +1,18 @@
+Beyond
+Copyright 2026 the Beyond authors and contributors.
+
+The original work in this repository is licensed under the Apache License,
+Version 2.0. Files or subdirectories that carry their own license or copyright
+notice remain governed by those terms and are not relicensed by this notice.
+
+In particular, `quant/fa4_cute/` retains its BSD 3-Clause License and existing
+copyright attribution; see `quant/fa4_cute/LICENSE`. Model weights, datasets,
+generated data, and external software are not redistributed under the Beyond
+license. Their respective upstream licenses, access terms, and use restrictions
+continue to apply.
+
+The `quant/fa4_cute/` subtree contains code adapted from the FlashAttention
+CuTe implementation and NVIDIA CUTLASS/CuTe examples. The upstream BSD
+3-Clause terms, contributor list, file-level copyright notices, and SPDX
+identifiers are retained in that subtree. No upstream project or contributor
+endorses this work.

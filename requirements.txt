@@ -1,0 +1,33 @@
+# Runtime versions are pinned to the supported CUDA 13 and vLLM stack.
+-c constraints/vllm-0.21.0.txt
+
+# Training and model loading.
+torch==2.11.0
+torchvision==0.26.0
+numpy==2.2.6
+transformers==5.6.2
+tokenizers==0.22.2
+safetensors==0.8.0
+datasets==3.6.0
+accelerate==1.14.0
+tqdm
+tensorboard
+megatron-core
+mistral-common[image]==1.11.2
+kernels==0.14.0
+ninja
+setuptools<81
+
+# vLLM and the packed CuTe runtime.
+vllm==0.21.0
+nvidia-cutlass-dsl==4.4.2
+apache-tvm-ffi==0.1.9
+quack-kernels==0.4.1
+torch-c-dlpack-ext==0.1.5
+cuda-bindings==13.2.0; platform_system == "Linux"
+cuda-python==13.2.0; platform_system == "Linux"
+cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"
+nvidia-cudnn-cu13==9.19.0.56; platform_system == "Linux"
+nvidia-cusparselt-cu13==0.8.0; platform_system == "Linux"
+nvidia-nccl-cu13==2.28.9; platform_system == "Linux"
+nvidia-nvshmem-cu13==3.4.5; platform_system == "Linux"
