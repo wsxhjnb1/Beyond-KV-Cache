@@ -1,6 +1,6 @@
 # Beyond KV Cache
 
-**[Read the full paper (PDF)](paper/Beyond.pdf)** | EMNLP 2026 main conference (accepted)
+**[Project page](https://wsxhjnb1.github.io/Beyond-KV-Cache/)** | **[Read the paper (PDF)](https://wsxhjnb1.github.io/Beyond-KV-Cache/paper/Beyond.pdf)** | EMNLP 2026 main conference (accepted)
 
 *Beyond: Better-than-Full-Precision KV Caches via Learnable Non-Uniform Quantization as Implicit Regularization*
 
@@ -15,6 +15,12 @@ OpenAI-compatible API.
 This repository contains the paper and the maintained training and inference
 code. It does not distribute model weights, datasets, checkpoints, generated
 outputs, or measurement data.
+
+## Project website
+
+The public project page and direct paper PDF are served by GitHub Pages from
+`docs/` on `main`. This is a static site with no build dependencies. The original
+paper is also available at [`paper/Beyond.pdf`](paper/Beyond.pdf).
 
 ## Requirements
 

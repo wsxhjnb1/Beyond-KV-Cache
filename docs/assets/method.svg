@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="310" viewBox="0 0 800 310" role="img" aria-labelledby="title description">
+  <title id="title">Beyond: learn the cache quantizer with a frozen model</title>
+  <desc id="description">Frozen model keys and values pass through a hard quantizer with learned levels and thresholds. Next-token loss updates only the quantizer. Inference stores packed codes and group metadata and reads them with a fused attention kernel.</desc>
+  <defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#65838c"/></marker><marker id="learn" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#16616a"/></marker></defs>
+  <rect width="800" height="310" fill="#f2f7f8" rx="5"/>
+  <g font-family="Segoe UI,Arial,sans-serif" fill="#152d38">
+    <text x="35" y="35" font-size="15" letter-spacing="1.6" fill="#50656f">QUANTIZER TRAINING</text>
+    <rect x="35" y="62" width="195" height="83" rx="5" fill="white" stroke="#c0d3d8"/>
+    <text x="132" y="95" text-anchor="middle" font-size="20" font-weight="600">Frozen LLM</text>
+    <text x="132" y="123" text-anchor="middle" font-size="16" fill="#50656f">Keys and values</text>
+    <path d="M231 103 H293" stroke="#65838c" stroke-width="1.8" marker-end="url(#arrow)"/>
+    <rect x="306" y="62" width="220" height="83" rx="5" fill="#16616a"/>
+    <text x="416" y="95" text-anchor="middle" font-size="20" font-weight="600" fill="white">Hard KV quantizer</text>
+    <text x="416" y="123" text-anchor="middle" font-size="16" fill="white">Levels R · thresholds T</text>
+    <path d="M527 103 H587" stroke="#65838c" stroke-width="1.8" marker-end="url(#arrow)"/>
+    <rect x="601" y="62" width="164" height="83" rx="5" fill="white" stroke="#c0d3d8"/>
+    <text x="683" y="95" text-anchor="middle" font-size="20" font-weight="600">Next-token</text>
+    <text x="683" y="123" text-anchor="middle" font-size="18">NLL loss</text>
+    <path d="M683 147 V176 H416 V149" fill="none" stroke="#16616a" stroke-width="1.8" marker-end="url(#learn)"/>
+    <text x="553" y="198" text-anchor="middle" font-size="15" fill="#16616a">Update quantizer parameters only</text>
+    <path d="M35 220 H765" stroke="#d5e1e4"/>
+    <text x="35" y="254" font-size="15" letter-spacing="1.6" fill="#50656f">SERVING</text>
+    <text x="35" y="284" font-size="17">Packed 4-bit codes + group metadata</text>
+    <path d="M385 275 H438" stroke="#65838c" stroke-width="1.8" marker-end="url(#arrow)"/>
+    <text x="456" y="281" font-size="18" font-weight="600">Fused packed-cache attention</text>
+  </g>
+</svg>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="568" viewBox="0 0 390 568" role="img" aria-labelledby="title description">
+<title id="title">Beyond quantizer training and serving</title><desc id="description">A frozen model provides keys and values to a hard quantizer. The next-token loss updates learned quantizer parameters only. Inference uses packed 4-bit codes and group metadata with fused attention.</desc>
+<defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7" fill="#65838c"/></marker></defs>
+<rect width="390" height="568" rx="5" fill="#f2f7f8"/>
+<g font-family="Segoe UI,Arial,sans-serif" fill="#152d38" text-anchor="middle">
+<text x="195" y="35" font-size="16" letter-spacing="1" fill="#50656f">QUANTIZER TRAINING</text>
+<rect x="40" y="55" width="310" height="75" rx="5" fill="white" stroke="#c0d3d8"/>
+<text x="195" y="86" font-size="21" font-weight="600">Frozen LLM</text><text x="195" y="113" font-size="17" fill="#50656f">Keys and values</text>
+<path d="M195 132V159" stroke="#65838c" stroke-width="1.8" marker-end="url(#arrow)"/>
+<rect x="40" y="171" width="310" height="78" rx="5" fill="#16616a"/>
+<text x="195" y="204" font-size="21" font-weight="600" fill="white">Hard KV quantizer</text><text x="195" y="232" font-size="17" fill="white">Learned levels R · thresholds T</text>
+<path d="M195 251V278" stroke="#65838c" stroke-width="1.8" marker-end="url(#arrow)"/>
+<rect x="40" y="290" width="310" height="65" rx="5" fill="white" stroke="#c0d3d8"/>
+<text x="195" y="329" font-size="21" font-weight="600">Next-token NLL loss</text>
+<text x="195" y="387" font-size="17" fill="#16616a">Update quantizer parameters only</text>
+<path d="M25 412H365" stroke="#d5e1e4"/>
+<text x="195" y="445" font-size="16" letter-spacing="1" fill="#50656f">SERVING</text>
+<text x="195" y="478" font-size="17">Packed 4-bit codes + group metadata</text>
+<path d="M195 489V509" stroke="#65838c" stroke-width="1.8" marker-end="url(#arrow)"/>
+<text x="195" y="543" font-size="19" font-weight="600">Fused packed-cache attention</text>
+</g></svg>

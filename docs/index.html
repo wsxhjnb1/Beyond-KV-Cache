@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#163f4b">
+  <title>Beyond | Learnable KV Cache Quantization</title>
+  <meta name="description" content="Beyond learns non-uniform KV cache quantizers from language-model loss with a frozen backbone. EMNLP 2026 main conference, accepted. Read the paper and explore the code.">
+  <meta name="citation_title" content="Beyond: Better-than-Full-Precision KV Caches via Learnable Non-Uniform Quantization as Implicit Regularization">
+  <meta name="citation_author" content="Yuhao Xie">
+  <meta name="citation_author" content="Mingjie Lin">
+  <meta name="citation_publication_date" content="2026">
+  <meta name="citation_pdf_url" content="https://wsxhjnb1.github.io/Beyond-KV-Cache/paper/Beyond.pdf">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Beyond: Learnable KV Cache Quantization">
+  <meta property="og:description" content="Loss-aware quantization, a frozen backbone, and a packed-cache inference path. EMNLP 2026 main conference, accepted.">
+  <meta property="og:url" content="https://wsxhjnb1.github.io/Beyond-KV-Cache/">
+  <link rel="canonical" href="https://wsxhjnb1.github.io/Beyond-KV-Cache/">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="masthead wrap">
+    <a class="wordmark" href="./" aria-label="Beyond home">Beyond<span class="wordmark-period">.</span></a>
+    <nav aria-label="On this page">
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#citation">Citation</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="paper-title">
+      <p class="venue">EMNLP 2026 <span aria-hidden="true">/</span> Main conference · Accepted</p>
+      <h1 id="paper-title"><span class="hero-name">Beyond</span>Better-than-Full-Precision KV Caches via Learnable Non-Uniform Quantization as Implicit Regularization</h1>
+      <p class="authors"><a href="https://github.com/wsxhjnb1">Yuhao Xie</a><span aria-hidden="true">·</span>Mingjie Lin</p>
+      <p class="affiliation">University of Central Florida</p>
+      <div class="actions">
+        <a class="button primary" href="paper/Beyond.pdf">Read the paper <span>PDF · 24 pages</span></a>
+        <a class="button secondary" href="https://github.com/wsxhjnb1/Beyond-KV-Cache">View code <span>GitHub</span></a>
+      </div>
+      <p class="lead">What if a smaller KV cache could also improve model quality? Beyond learns the cache quantizer from next-token prediction loss, while keeping the language model frozen.</p>
+    </section>
+
+    <section class="metrics wrap" aria-label="Selected results from the paper">
+      <div class="metric"><strong>3.2<span>×</span></strong><h2>KV storage compression</h2><p>5.0 effective bits per scalar, including metadata, versus a 16-bit cache.</p></div>
+      <div class="metric"><strong>1.50<span>×</span></strong><h2>Peak decode-kernel speedup</h2><p>Versus FlashAttention-4 on one NVIDIA B300, across the tested configurations.</p></div>
+      <div class="metric"><strong>1.17<span>×</span></strong><h2>Peak serving throughput gain</h2><p>Complete vLLM paths on one B300, at batch 1536 with cold 1024+128-token requests.</p></div>
+    </section>
+
+    <section id="method" class="section wrap" aria-labelledby="method-title">
+      <div class="section-heading"><p class="eyebrow">01 / Method</p><h2 id="method-title">Learn the quantizer.<br>Keep the model frozen.</h2></div>
+      <div class="section-body">
+        <p>Most KV quantizers optimize a local reconstruction objective. Beyond instead learns the representation levels <em>R</em> and decision thresholds <em>T</em> from next-token negative log-likelihood. The forward pass uses the same hard quantizer during training and inference.</p>
+        <picture><source media="(max-width: 720px)" srcset="assets/method-mobile.svg" width="390" height="568"><img class="method-diagram" src="assets/method.svg" width="800" height="310" alt="A frozen language model produces keys and values. A hard KV quantizer with learned representation levels R and thresholds T produces quantized states. Next-token loss updates only the quantizer parameters. Serving reads packed 4-bit cache codes with group metadata using a fused attention kernel."></picture>
+        <div class="method-details">
+          <div><h3>Loss-aware learning</h3><p>Straight-through and boundary-localized pseudo-gradients update the quantizer parameters, with no backbone-weight updates.</p></div>
+          <div><h3>Packed-cache serving</h3><p>A fused CuTe decode kernel reads packed 4-bit codes and reconstructs K/V in registers. vLLM retains scheduling and paged cache management.</p></div>
+        </div>
+        <p class="source-note">Method: Sections 3.2–3.3. Storage accounting: Appendix F. The default configuration uses 4-bit codes and groups of 32.</p>
+      </div>
+    </section>
+
+    <section id="results" class="section results-section wrap" aria-labelledby="results-title">
+      <div class="section-heading"><p class="eyebrow">02 / Results</p><h2 id="results-title">Quality and efficiency,<br>measured separately.</h2></div>
+      <div class="section-body">
+        <p>The paper evaluates three instruction-tuned models, spanning dense and MoE backbones. Beyond improves held-out Pile perplexity relative to Native and obtains the highest LongBench Avg21 among the four main compared methods for each model.</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Model quality results; scroll horizontally on narrow screens">
+          <table>
+            <caption>Selected quality results · Tables 1 and 3</caption>
+            <thead><tr><th scope="col">Model</th><th scope="col">Pile PPL reduction<br><span>vs. Native</span></th><th scope="col">LongBench<br><span>Avg21 ↑</span></th><th scope="col">Avg21 gain<br><span>vs. Native</span></th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Llama-3.1-8B-Instruct</th><td>2.2%</td><td class="result-value">44.9</td><td>+1.5 points</td></tr>
+              <tr><th scope="row">Ministral-3-14B-Instruct-2512-BF16</th><td>2.8%</td><td class="result-value">47.4</td><td>+2.0 points</td></tr>
+              <tr><th scope="row">Qwen3-30B-A3B-Instruct-2507</th><td>7.0%</td><td class="result-value">50.2</td><td>+1.7 points</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="source-note">Main comparisons: Native, KV-FP8, TurboQuant-KV4, and Beyond. These methods use different effective cache budgets; Appendix E.4 adds roughly matched-bit controls. Scores above follow the rounded values reported in Section 4.2.</p>
+        <div class="measurement-note">
+          <h3>What the speedups measure</h3>
+          <p><strong>Kernel:</strong> batches 1 and 16 over 1K–128K contexts, after 50 warmups and 500 CUDA-graph replays. <strong>Serving:</strong> the official vLLM offline driver, 1024-token prompts, 128 generated tokens, an 8192-token scheduling budget, the same BF16 backbone, and prefix caching disabled. The two speedups refer to different measurements.</p>
+          <a class="text-link" href="paper/Beyond.pdf#page=9">See deployment results in Figure 7</a>
+        </div>
+        <p class="source-note">Gains vary by task and model. Improvements over the unmodified model do not imply a uniform capability gain; the paper reports task regressions and additional adaptation controls.</p>
+      </div>
+    </section>
+
+    <section id="citation" class="section citation-section wrap" aria-labelledby="citation-title">
+      <div class="section-heading"><p class="eyebrow">03 / Reference</p><h2 id="citation-title">Read, reproduce,<br>and cite.</h2></div>
+      <div class="section-body">
+        <p><strong>Yuhao Xie and Mingjie Lin.</strong> Beyond: Better-than-Full-Precision KV Caches via Learnable Non-Uniform Quantization as Implicit Regularization. <em>EMNLP 2026, main conference (accepted).</em></p>
+        <div class="reference-links"><a class="text-link" href="paper/Beyond.pdf">Paper PDF</a><a class="text-link" href="https://github.com/wsxhjnb1/Beyond-KV-Cache">Source code</a><a class="text-link" href="citation.bib" download>Download BibTeX</a></div>
+        <details><summary>BibTeX</summary><pre><code>@misc{xie2026beyond,
+  title = {Beyond: Better-than-Full-Precision KV Caches via
+    Learnable Non-Uniform Quantization as Implicit Regularization},
+  author = {Yuhao Xie and Mingjie Lin},
+  year = {2026},
+  note = {Accepted to EMNLP 2026, main conference},
+  url = {https://wsxhjnb1.github.io/Beyond-KV-Cache/}
+}</code></pre></details>
+      </div>
+    </section>
+  </main>
+  <footer class="wrap"><span class="footer-name">Beyond.</span><span>Yuhao Xie · Mingjie Lin <span aria-hidden="true">/</span> University of Central Florida</span><a href="paper/Beyond.pdf">Read the paper</a></footer>
+</body>
+</html>
