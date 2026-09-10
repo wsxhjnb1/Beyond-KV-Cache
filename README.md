@@ -1,14 +1,20 @@
 # Beyond KV Cache
 
+**[Read the full paper (PDF)](paper/Beyond.pdf)** | EMNLP 2026 main conference (accepted)
+
+*Beyond: Better-than-Full-Precision KV Caches via Learnable Non-Uniform Quantization as Implicit Regularization*
+
+Yuhao Xie and Mingjie Lin, University of Central Florida.
+
 Beyond learns non-uniform quantization levels and decision thresholds for
 4-bit, group-size-32 K/V caches. The forward pass uses hard assignments while
 the training path keeps FP32 master parameters and a straight-through gradient.
 The inference path stores packed cache values and serves models through vLLM's
 OpenAI-compatible API.
 
-This repository contains only the maintained training and inference code. It
-does not distribute model weights, datasets, checkpoints, generated outputs, or
-measurement data.
+This repository contains the paper and the maintained training and inference
+code. It does not distribute model weights, datasets, checkpoints, generated
+outputs, or measurement data.
 
 ## Requirements
 
