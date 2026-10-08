@@ -22,6 +22,8 @@ The public project page and direct paper PDF are served by GitHub Pages from
 `docs/` on `main`. This is a static site with no build dependencies. The original
 paper is also available at [`paper/Beyond.pdf`](paper/Beyond.pdf).
 
+[EMNLP 2026 conference poster (PDF)](docs/poster/EMNLP2026_Beyond_Poster.pdf).
+
 ## Requirements
 
 - Linux and Python 3.10 or newer
