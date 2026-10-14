@@ -15,6 +15,7 @@
   <meta property="og:title" content="Beyond: Learnable KV Cache Quantization">
   <meta property="og:description" content="Learn the quantizer. Freeze the model. Decode packed KV. Explore Beyond's EMNLP 2026 paper, final poster, and implementation.">
   <meta property="og:url" content="https://wsxhjnb1.github.io/Beyond-KV-Cache/">
+  <meta property="og:image" content="https://wsxhjnb1.github.io/Beyond-KV-Cache/assets/concept-cover.png">
   <link rel="canonical" href="https://wsxhjnb1.github.io/Beyond-KV-Cache/">
   <link rel="stylesheet" href="assets/site.css">
 </head>
@@ -26,6 +27,7 @@
       <a href="#method">Method</a>
       <a href="#results">Quality</a>
       <a href="#serving">Serving</a>
+      <a href="#resources">Resources</a>
     </nav>
   </header>
 
@@ -51,24 +53,91 @@
       <div class="metric"><strong>1.17<span>×</span></strong><h2>Peak serving throughput gain</h2><p>Complete vLLM paths on one B300, at batch 1536 with cold 1024+128-token requests.</p></div>
     </section>
 
-    <section id="method" class="section wrap" aria-labelledby="method-title">
-      <div class="section-heading"><p class="eyebrow">01 / Method</p><h2 id="method-title">Learn from language-model loss.</h2></div>
-      <div class="section-body">
-        <p>Local KV reconstruction error is only a proxy for generation quality: a cache perturbation passes through attention and the remaining network before it changes a prediction. Beyond learns representation levels <em>R</em> and ordered decision thresholds <em>T</em> directly from next-token negative log-likelihood, while keeping the backbone weights frozen.</p>
-        <picture><source media="(max-width: 720px)" srcset="assets/method-mobile.svg" width="390" height="568"><img class="method-diagram" src="assets/method.svg" width="800" height="310" alt="Frozen model keys and values pass through a hard quantizer with learned levels R and thresholds T, then through frozen attention and the downstream network. Next-token loss updates only R and T. Serving reads packed 4-bit codes and group metadata with a fused attention kernel."></picture>
-        <p>For each 32-value group, normalize with its minimum and scale, assign each value to one of 16 learned levels using 15 interior thresholds, then rescale for attention. Training and inference share the same hard bin assignment.</p>
-        <div class="method-details">
-          <div><h3>Hard forward, loss-driven updates</h3><p>Identity straight-through input gradients and boundary-localized threshold pseudo-gradients enable learning. Only the quantizer parameters are updated.</p></div>
-          <div><h3>What fits in the cache</h3><p>Each group stores 128 code bits plus 32 min/scale metadata bits: 5.0 effective bits per scalar, or 3.2× payload compression relative to 16-bit KV, before page padding.</p></div>
-        </div>
-        <p class="source-note">Payload compression is not a claim of 3.2× lower total GPU memory: model weights, workspaces, and cache-allocation overhead are separate.</p>
+    <section id="method" class="chapter wrap" aria-labelledby="method-title">
+      <div class="chapter-intro">
+        <div class="section-heading"><p class="eyebrow">01 / Method</p><h2 id="method-title">Learn the cache,<br> not the model.</h2></div>
+        <p>Local KV reconstruction error is only a proxy for generation quality: a cache perturbation passes through attention and the remaining network before it changes a prediction. Beyond learns representation levels <em>R</em> and decision thresholds <em>T</em> directly from next-token negative log-likelihood (NLL), while keeping the backbone weights frozen.</p>
       </div>
+      <figure class="poster-figure">
+        <a href="assets/poster-method.png" aria-label="Open the original poster method diagram at full resolution"><img class="method-diagram" src="assets/poster-method.png" alt="Original poster schematic: groups of K/V values are normalized to zero to one, assigned to 16 hard quantization levels using 15 learned thresholds, and affinely rescaled. Frozen attention and the downstream network produce next-token loss. A curved feedback path updates only levels R and thresholds T." loading="lazy"></a>
+        <figcaption>The method schematic from our final conference poster. Solid arrows show the hard forward pass; the feedback path updates only the quantizer. <a href="assets/poster-method.png">Open full resolution ↗</a></figcaption>
+      </figure>
+
+      <div class="method-grid">
+        <article class="method-step">
+          <p class="step-label">01 / Representation</p><h3>One learned table for each KV group</h3>
+          <p>Each layer × K/V projection × KV head × 32-dimensional group has its own scalar quantizer, shared across sequence positions. Keys are quantized after RoPE; values after projection. The group minimum <em>m</em> and range <em>s</em> normalize each scalar <em>z</em> to [0, 1].</p>
+          <div class="equation" role="math" aria-label="x equals clip of z minus m divided by s plus epsilon, between zero and one">x = clip((z − m) / (s + ε), 0, 1)</div>
+          <p class="minor">Here m = min(z) and s = max(z) − min(z) within the current group. These statistics come from the activations; the learned parameters are the levels and thresholds.</p>
+        </article>
+        <article class="method-step">
+          <p class="step-label">02 / Hard assignment</p><h3>Learn where the bins are—and what they return</h3>
+          <p>Fifteen interior thresholds select one of sixteen representation levels. The endpoints stay fixed at t<sub>0</sub> = 0 and t<sub>16</sub> = 1. Unlike a fixed uniform grid, thresholds and reconstruction levels can adapt independently.</p>
+          <div class="equation" role="math" aria-label="Q of x equals r k when t k is less than or equal to x and x is less than t k plus one. z hat equals m plus s times Q of x.">Q(x; R, T) = r<sub>k</sub> for x ∈ B<sub>k</sub>(T)<br>ẑ = m + s · Q(x; R, T)</div>
+          <p class="minor">B<sub>k</sub> = [t<sub>k</sub>, t<sub>k+1</sub>); the last bin also includes 1. Initialization uses r<sub>k</sub> = k / 15 and midpoint thresholds. Every training forward pass uses the same hard assignment as inference.</p>
+        </article>
+      </div>
+
+      <article class="objective-panel">
+        <div><p class="step-label">03 / Learning objective</p><h3>Optimize the prediction, not a reconstruction proxy</h3><p>Run the frozen model with quantized K/V and minimize next-token NLL. Only R and T receive optimizer updates; the backbone θ remains fixed.</p></div>
+        <div class="objective-math">
+          <math display="block" aria-label="Minimize over R and T the sum over training sequences X and positions t of negative log probability of the next token given its prefix and the quantizer, with theta fixed."><mrow><munder><mi>min</mi><mrow><mi>R</mi><mo>,</mo><mi>T</mi></mrow></munder><munder><mo>∑</mo><mrow><mi>X</mi><mo>∈</mo><mi>𝒳</mi></mrow></munder><munder><mo>∑</mo><mi>t</mi></munder><mo>−</mo><mi>log</mi><msub><mi>p</mi><mi>θ</mi></msub><mo>(</mo><msub><mi>x</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>|</mo><msub><mi>x</mi><mrow><mo>≤</mo><mi>t</mi></mrow></msub><mo>;</mo><msub><mi>Q</mi><mrow><mi>R</mi><mo>,</mo><mi>T</mi></mrow></msub><mo>)</mo></mrow></math>
+          <p class="minor">𝒳 is the training sequence stream; t runs over next-token prediction positions.</p>
+        </div>
+      </article>
+
+      <div class="method-grid">
+        <article class="method-step">
+          <p class="step-label">04 / Backward pass</p><h3>Hard forward. Explicit surrogate gradients.</h3>
+          <p>A hard bin assignment is not differentiable at its boundaries. Beyond uses an identity straight-through estimator for the input, accumulates gradients for each selected level, and updates thresholds from nearby boundary signals.</p>
+          <p>The paper uses <strong>half-wave rectification</strong>: positive left-side signals and negative right-side signals supply opposing candidate directions for a threshold update. Thresholds are projected back to an ordered feasible set after each optimizer step.</p>
+          <p class="minor">No soft assignments, temperature, or annealing schedule is introduced. These are pseudo-gradients, not exact derivatives of the hard threshold objective or a guarantee that every update reduces NLL.</p>
+        </article>
+        <article class="method-step">
+          <p class="step-label">05 / Packed deployment</p><h3>Keep codes in memory; reconstruct inside attention</h3>
+          <p>The cache writer stores a 4-bit code per scalar and FP16 minimum/scale statistics per group. Learned thresholds assign new values to codes; learned levels reconstruct them during attention. A fused decode kernel consumes this packed representation directly.</p>
+          <div class="equation" role="math" aria-label="32 times 4 plus 2 times 16 bits, divided by 32 values, equals 5 bits per scalar">(32 × 4 + 2 × 16) / 32 = 5 bits/scalar<br>16 / 5 = <strong>3.2× KV payload compression</strong></div>
+          <p class="minor">This counts per-group metadata, before page padding. Persistent quantizer tables, model weights, and workspaces are separate; it is not a 3.2× reduction in total GPU memory.</p>
+        </article>
+      </div>
+
+      <details class="technical-details">
+        <summary>The backward rules, precisely</summary>
+        <div class="detail-content">
+          <p>Let g(x) = ∂L/∂x̂ be the downstream gradient at the normalized quantizer output. The input STE uses ∂L/∂x ≈ g(x). Each level receives the sum of gradients from the samples assigned to its bin:</p>
+          <div class="equation" role="math">∂L/∂r<sub>k</sub> = ∑<sub>x ∈ B<sub>k</sub></sub> g(x)</div>
+          <p>For threshold t<sub>k</sub>, define Δr<sub>k</sub> = r<sub>k</sub> − r<sub>k−1</sub>. With ε<sub>bw</sub> = 0.009, aggregate minibatch gradients in the left window [t<sub>k</sub> − ε<sub>bw</sub>, t<sub>k</sub>) and right window [t<sub>k</sub>, t<sub>k</sub> + ε<sub>bw</sub>]:</p>
+          <div class="equation" role="math">G<sub>L</sub> = −Δr<sub>k</sub> ∑<sub>x ∈ W<sub>L</sub></sub> g(x), &nbsp; G<sub>R</sub> = −Δr<sub>k</sub> ∑<sub>x ∈ W<sub>R</sub></sub> g(x)<br>ĝ<sub>t<sub>k</sub></sub> = max(G<sub>L</sub>, 0) + min(G<sub>R</sub>, 0)</div>
+          <p>Under gradient descent, the positive left component moves the threshold left and the negative right component moves it right. These are directional, boundary-localized surrogate signals. Level and threshold gradients are explicitly defined in the custom backward pass; an input-only stop-gradient expression would not learn R and T by itself.</p>
+          <p class="minor">This section describes the paper's half-wave rule. See the <a href="https://github.com/wsxhjnb1/Beyond-KV-Cache/blob/main/USAGE.md">usage guide</a> for the public training entry point.</p>
+        </div>
+      </details>
+      <details class="technical-details">
+        <summary>Why can quantization lower the loss?</summary>
+        <div class="detail-content">
+          <p>The direction of a perturbation matters, not just its size. For downstream loss Ψ, a local expansion around cached representations z separates first-order alignment from a second-order contribution:</p>
+          <div class="equation" role="math">E[Ψ(z + δ)] − Ψ(z)<br>= ⟨∇Ψ(z), E[δ]⟩ + ½ Tr(H E[δδ<sup>⊤</sup>]) + ρ</div>
+          <p>Under a β-Lipschitz Hessian along the relevant segments, |ρ| ≤ (β/6) E‖δ‖³. A loss-aligned perturbation can therefore help even when its local reconstruction error is nonzero. This motivates learning the quantizer from NLL instead of assuming that the smallest reconstruction error is always best.</p>
+          <p class="minor">The true downstream Hessian H may be indefinite; the second-order term is not necessarily a positive penalty. This local analysis is not a guarantee of improvement for every input or task, and does not establish that learned quantization always increases attention entropy. Formal assumptions and proofs are in the <a href="paper/Beyond.pdf">paper and appendix</a>.</p>
+        </div>
+      </details>
+      <details class="technical-details">
+        <summary>Training setup and parameter footprint</summary>
+        <div class="detail-content setup-grid">
+          <dl><dt>Optimizer</dt><dd>Adam, 7 × 10<sup>−4</sup>, cosine decay; at most 500 optimizer steps.</dd><dt>Data / batch</dt><dd>The Pile; 8192-token sequences; global effective batch size 32; seed 42.</dd><dt>Checkpoint selection</dt><dd>150 validation chunks, full validation every 10 updates, patience 3; select the best checkpoint. Evaluation uses 150 disjoint chunks.</dd></dl>
+          <div><p>Each table has 16 levels and 15 interior thresholds. For L layers, H<sub>kv</sub> KV heads, and head dimension d<sub>h</sub>, there are 2LH<sub>kv</sub>d<sub>h</sub>/32 tables, shared across tokens.</p><p>The evaluated models use 47,616–79,360 learned scalar parameters. FP32 master parameters are used for training; deployed R/T tables use FP16. Their persistent storage is 93–155 KiB, separate from per-token cache payload.</p><p class="minor">Non-uniform tables are supported independently for K and V; learning does not require every table to become non-uniform. The retained Ministral K tables remain on their initialized uniform grid.</p></div>
+        </div>
+      </details>
     </section>
 
     <section id="results" class="section results-section wrap" aria-labelledby="results-title">
       <div class="section-heading"><p class="eyebrow">02 / Quality</p><h2 id="results-title">Beyond the full-precision baseline.</h2></div>
       <div class="section-body">
         <p>Quantizer-only training lowers held-out Pile perplexity on all three tested instruction-tuned models. On LongBench, Beyond achieves the highest Avg21 among Native, KV-FP8, TurboQuant, and Beyond for each model.</p>
+        <div class="result-plots">
+          <figure><a href="assets/quality-ppl.png"><img src="assets/quality-ppl.png" loading="lazy" alt="Held-out Pile perplexity: Native, initialized quantizer, and trained Beyond for Llama, Ministral, and Qwen. Trained Beyond has the lowest perplexity for each model."></a><figcaption>Held-out perplexity ↓. Learning improves over both the initialized quantizer and the Native baseline.</figcaption></figure>
+          <figure><a href="assets/quality-longbench.png"><img src="assets/quality-longbench.png" loading="lazy" alt="LongBench Avg21 across three models, comparing Native, KV-FP8, TurboQuant and Beyond. Beyond achieves 44.9, 47.4, and 50.2."></a><figcaption>LongBench-v1 Avg21 ↑. Aggregate gains are +1.5 to +2.0 points over Native.</figcaption></figure>
+        </div>
         <div class="table-wrap" tabindex="0" role="region" aria-label="Model quality results; scroll horizontally on narrow screens">
           <table>
             <caption>Final poster results · Native → Beyond · 4-bit codes, group size 32</caption>
@@ -89,10 +158,13 @@
       <div class="section-heading"><p class="eyebrow">03 / Packed execution</p><h2 id="serving-title">From compressed KV<br> to faster decoding.</h2></div>
       <div class="section-body">
         <p>A fused CuTe decode kernel reads packed codes and combines level lookup, affine rescaling, attention scoring, online softmax, and value accumulation. The vLLM integration measures how this kernel translates into end-to-end serving.</p>
+        <p>Prefill keeps the standard dense-attention path with model-dtype quantize/dequantize K/V, while the cache writer stores persistent packed codes. During single-token decode, code lookup and affine rescaling occur in registers; reconstructed values feed tensor-core attention tiles without materializing a dense KV cache in HBM.</p>
         <div class="method-details">
           <div><h3>1.50× peak kernel speedup</h3><p>Versus FlashAttention-4 on one NVIDIA B300, using Llama-3.1-8B-Instruct geometry. The poster shows all 16 measured context/batch pairs.</p></div>
           <div><h3>1.17× peak serving throughput</h3><p>Versus the FA4 vLLM path at batch 1536. Tested batch capacity increases from 1582 to at least 4500: at least 2.84×.</p></div>
         </div>
+        <figure class="serving-plot"><a href="assets/decode-kernel.png"><img src="assets/decode-kernel.png" loading="lazy" alt="Attention decode kernel speedup relative to FlashAttention-4 over 1K to 128K contexts at batch sizes 1 and 16; peak 1.50 times."></a><figcaption><strong>Attention decode kernel.</strong> All 16 measured context/batch pairs. Ratio = FA4 latency / Beyond latency.</figcaption></figure>
+        <figure class="serving-plot"><a href="assets/serving-throughput.png"><img src="assets/serving-throughput.png" loading="lazy" alt="End-to-end vLLM total token throughput versus batch size for FA4 and Beyond. Peak relative gain is 1.17 times at batch 1536; Beyond succeeds through batch 4500."></a><figcaption><strong>End-to-end serving.</strong> Complete vLLM paths, with capacity boundaries marked separately from throughput. Larger capacity does not imply the same factor of throughput gain.</figcaption></figure>
         <div class="measurement-note">
           <h3>Two measurements, two scopes</h3>
           <p><strong>Kernel-only:</strong> batches 1 and 16, 1K–128K contexts, 50 warmups, and 500 CUDA-graph replays. Speedup is FA4 latency divided by Beyond latency.</p>
@@ -101,6 +173,18 @@
           <a class="text-link" href="poster/EMNLP2026_Beyond_Poster.pdf">See both performance plots in the final poster</a>
         </div>
         <p class="source-note"><strong>Evidence boundaries.</strong> Quality evaluation uses training-equivalent fake quantize/dequantize (fake-QDQ) with a floating-point cache. Real cache compression and serving measurements use the packed backend. These are separate experiments, and kernel speedup is not end-to-end throughput gain.</p>
+      </div>
+    </section>
+    <section id="resources" class="section wrap" aria-labelledby="resources-title">
+      <div class="section-heading"><p class="eyebrow">04 / Resources</p><h2 id="resources-title">Read, reproduce,<br> build on it.</h2></div>
+      <div class="section-body">
+        <div class="resource-grid">
+          <a class="resource-link" href="paper/Beyond.pdf"><strong>Paper &amp; appendix ↗</strong><span>Formal analysis, controls, ablations, and experimental details.</span></a>
+          <a class="resource-link" href="poster/EMNLP2026_Beyond_Poster.pdf"><strong>Final conference poster ↗</strong><span>The A0 poster, including the original method and result figures.</span></a>
+          <a class="resource-link" href="https://github.com/wsxhjnb1/Beyond-KV-Cache/blob/main/USAGE.md"><strong>Installation &amp; usage ↗</strong><span>Training commands, quantizer artifacts, and packed vLLM serving.</span></a>
+          <a class="resource-link" href="https://github.com/wsxhjnb1/Beyond-KV-Cache"><strong>Source code ↗</strong><span>The maintained training and inference implementation.</span></a>
+        </div>
+        <p class="source-note">The public repository does not distribute model weights, datasets, checkpoints, training outputs, or raw measurement data. The plots above reproduce the final poster's measured results, without regenerating or altering their data.</p>
       </div>
     </section>
   </main>
