@@ -1,28 +1,90 @@
 # Beyond KV Cache
 
-**[Project page](https://wsxhjnb1.github.io/Beyond-KV-Cache/)** | **[Read the paper (PDF)](https://wsxhjnb1.github.io/Beyond-KV-Cache/paper/Beyond.pdf)** | EMNLP 2026 main conference (accepted)
+**[Project page](https://wsxhjnb1.github.io/Beyond-KV-Cache/)** | **[Paper (PDF)](https://wsxhjnb1.github.io/Beyond-KV-Cache/paper/Beyond.pdf)** | **[Poster (PDF)](docs/poster/EMNLP2026_Beyond_Poster.pdf)** | EMNLP 2026 main conference
 
 *Beyond: Better-than-Full-Precision KV Caches via Learnable Non-Uniform Quantization as Implicit Regularization*
 
 Yuhao Xie and Mingjie Lin, University of Central Florida.
 
-Beyond learns non-uniform quantization levels and decision thresholds for
-4-bit, group-size-32 K/V caches. The forward pass uses hard assignments while
-the training path keeps FP32 master parameters and a straight-through gradient.
-The inference path stores packed cache values and serves models through vLLM's
-OpenAI-compatible API.
+KV-cache compression need not be only a trade-off between memory and model
+quality. Beyond learns how to quantize the cache from **next-token prediction
+loss**, rather than optimizing local reconstruction alone. With the language
+model frozen, its learned 4-bit caches improve held-out perplexity and average
+LongBench scores across three instruction-tuned models. A fused decode kernel
+brings the learned quantizer to packed-cache serving in vLLM.
 
 This repository contains the paper and the maintained training and inference
-code. It does not distribute model weights, datasets, checkpoints, generated
-outputs, or measurement data.
+code. It does not distribute model weights, datasets, checkpoints, training
+outputs, or raw measurement data.
+
+## Method
+
+1. **Learn from the downstream loss.** Keep the backbone fixed and learn
+   non-uniform reconstruction levels (R) and decision thresholds (T) for K/V
+   quantization. The objective is next-token prediction loss, not simply how
+   closely each cache entry is reconstructed.
+2. **Train with hard assignments.** Use hard quantization in the forward pass,
+   straight-through input gradients, and boundary-localized threshold
+   pseudo-gradients. Learned parameters are maintained as FP32 master values
+   during training.
+3. **Serve the packed cache.** Store 4-bit codes in groups of 32 values, then
+   fuse their lookup and rescaling into attention decoding. The maintained
+   inference path integrates this representation with vLLM's
+   OpenAI-compatible API.
+
+Each group stores 128 code bits plus 32 bits of minimum/scale metadata:
+**5 effective bits per scalar, or 3.2× KV-payload compression relative to BF16**.
+This includes the per-group min/scale metadata but excludes page padding; it is not a claim
+of 3.2× lower total GPU memory use.
+
+## Results from the final conference poster
+
+### Model quality
+
+Perplexity is measured on 150 disjoint held-out The Pile chunks. LongBench
+Avg21 is the unweighted mean over 21 tasks; higher aggregate scores do not
+mean every task improves. Parenthesized differences are score points. Values
+and relative reductions follow the final poster; percentages are not
+recomputed from the rounded PPL values shown below.
+
+| Backbone | Full-precision PPL ↓ | Beyond PPL ↓ | PPL reduction | Native LongBench Avg21 ↑ | Beyond Avg21 ↑ |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Llama-3.1-8B-Instruct | 5.50 | **5.38** | 2.2% | 43.4 | **44.9** (+1.5) |
+| Ministral-3-14B-Instruct-2512-BF16 | 6.77 | **6.58** | 2.8% | 45.4 | **47.4** (+2.0) |
+| Qwen3-30B-A3B-Instruct-2507 | 5.31 | **4.94** | 6.9% | 48.5 | **50.2** (+1.7) |
+
+Quality experiments use training-equivalent fake quantize/dequantize
+(fake-QDQ) evaluation, which retains a floating-point cache. The packed-cache
+serving measurements below are separate experiments, not a joint measurement
+of every quality and speed gain in one execution path.
+
+### Packed-cache serving
+
+- **Attention decode kernel: up to 1.50× speedup over FlashAttention-4.**
+  Measured on one NVIDIA B300 with Llama-3.1-8B-Instruct attention geometry,
+  batches 1 and 16, and 1K–128K context lengths; timing uses 50 warmups and 500 CUDA-graph
+  replays.
+- **End-to-end throughput: up to 1.17× over the FlashAttention-4 path.**
+  The peak occurs at batch 1536 in vLLM's official offline throughput
+  benchmark on one B300 with Llama-3.1-8B-Instruct, using cold 1024-token
+  prompts and 128-token generation,
+  BF16 model execution, an 8192-token scheduling budget, GPU memory
+  utilization 0.9, and prefix caching disabled.
+- **Tested batch capacity: at least 2.84×.** The FlashAttention-4 path
+  succeeds at batch 1582; Beyond succeeds through at least batch 4500.
+  The first tested KV-capacity failures are 1583 and 4800, respectively.
+  These tested points do not establish Beyond's exact maximum batch size
+  or a universal out-of-memory boundary.
+
+These are configuration-specific results reported in the poster, not speed,
+capacity, or quality guarantees for arbitrary hardware and workloads. See the
+[paper](paper/Beyond.pdf) for experimental details and limitations.
 
 ## Project website
 
 The public project page and direct paper PDF are served by GitHub Pages from
 `docs/` on `main`. This is a static site with no build dependencies. The original
 paper is also available at [`paper/Beyond.pdf`](paper/Beyond.pdf).
-
-[EMNLP 2026 conference poster (PDF)](docs/poster/EMNLP2026_Beyond_Poster.pdf).
 
 ## Requirements
 

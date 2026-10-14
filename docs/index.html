@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#163f4b">
   <title>Beyond | Learnable KV Cache Quantization</title>
-  <meta name="description" content="Beyond learns non-uniform KV cache quantizers from language-model loss with a frozen backbone. EMNLP 2026 main conference, accepted. Read the paper and explore the code.">
+  <meta name="description" content="Learn the quantizer. Freeze the model. Decode packed KV. Beyond combines loss-aware 4-bit KV-cache quantization with better held-out perplexity and efficient packed serving. EMNLP 2026 Main Conference.">
   <meta name="citation_title" content="Beyond: Better-than-Full-Precision KV Caches via Learnable Non-Uniform Quantization as Implicit Regularization">
   <meta name="citation_author" content="Yuhao Xie">
   <meta name="citation_author" content="Mingjie Lin">
@@ -13,7 +13,7 @@
   <meta name="citation_pdf_url" content="https://wsxhjnb1.github.io/Beyond-KV-Cache/paper/Beyond.pdf">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Beyond: Learnable KV Cache Quantization">
-  <meta property="og:description" content="Loss-aware quantization, a frozen backbone, and a packed-cache inference path. EMNLP 2026 main conference, accepted.">
+  <meta property="og:description" content="Learn the quantizer. Freeze the model. Decode packed KV. Explore Beyond's EMNLP 2026 paper, final poster, and implementation.">
   <meta property="og:url" content="https://wsxhjnb1.github.io/Beyond-KV-Cache/">
   <link rel="canonical" href="https://wsxhjnb1.github.io/Beyond-KV-Cache/">
   <link rel="stylesheet" href="assets/site.css">
@@ -24,67 +24,86 @@
     <a class="wordmark" href="./" aria-label="Beyond home">Beyond<span class="wordmark-period">.</span></a>
     <nav aria-label="On this page">
       <a href="#method">Method</a>
-      <a href="#results">Results</a>
+      <a href="#results">Quality</a>
+      <a href="#serving">Serving</a>
     </nav>
   </header>
 
   <main id="main">
     <section class="hero wrap" aria-labelledby="paper-title">
-      <p class="venue">EMNLP 2026 <span aria-hidden="true">/</span> Main conference · Accepted</p>
+      <p class="venue">EMNLP 2026 <span aria-hidden="true">/</span> Main conference · Poster · 1357</p>
       <h1 id="paper-title"><span class="hero-name">Beyond</span>Better-than-Full-Precision KV Caches via Learnable Non-Uniform Quantization as Implicit Regularization</h1>
-      <p class="authors"><a href="https://github.com/wsxhjnb1">Yuhao Xie</a><span aria-hidden="true">·</span>Mingjie Lin</p>
+      <p class="authors"><a href="https://www.linkedin.com/in/yuhao-xie">Yuhao Xie</a><span aria-hidden="true">·</span><a href="mailto:milin@ucf.edu">Mingjie Lin</a></p>
       <p class="affiliation">University of Central Florida</p>
       <div class="actions">
         <a class="button primary" href="paper/Beyond.pdf">Read the paper <span>PDF · 24 pages</span></a>
+        <a class="button secondary" href="poster/EMNLP2026_Beyond_Poster.pdf">Explore the poster <span>PDF · A0</span></a>
         <a class="button secondary" href="https://github.com/wsxhjnb1/Beyond-KV-Cache">View code <span>GitHub</span></a>
       </div>
-      <p class="lead">What if a smaller KV cache could also improve model quality? Beyond learns the cache quantizer from next-token prediction loss, while keeping the language model frozen.</p>
+      <p class="tagline">Learn the quantizer. Freeze the model. Decode packed KV.</p>
+      <p class="lead">Compression need not trade away model quality. Beyond learns non-uniform KV-cache quantizers directly from next-token prediction loss. Across three tested instruction-tuned models, 4-bit caches lower held-out perplexity and improve long-context benchmark averages. A separate packed-cache implementation brings compression to vLLM serving.</p>
     </section>
 
-    <section class="metrics wrap" aria-label="Selected results from the paper">
-      <div class="metric"><strong>3.2<span>×</span></strong><h2>KV storage compression</h2><p>5.0 effective bits per scalar, including metadata, versus a 16-bit cache.</p></div>
+    <section class="metrics wrap" aria-label="Selected results from the final conference poster">
+      <div class="metric"><strong>3.2<span>×</span></strong><h2>KV payload compression</h2><p>4-bit codes, group size 32. Includes min/scale metadata; before page padding.</p></div>
+      <div class="metric"><strong class="range">2.2–6.9<span>%</span></strong><h2>Lower held-out perplexity</h2><p>Versus the full-precision Native baseline on the three tested models.</p></div>
       <div class="metric"><strong>1.50<span>×</span></strong><h2>Peak decode-kernel speedup</h2><p>Versus FlashAttention-4 on one NVIDIA B300, across the tested configurations.</p></div>
       <div class="metric"><strong>1.17<span>×</span></strong><h2>Peak serving throughput gain</h2><p>Complete vLLM paths on one B300, at batch 1536 with cold 1024+128-token requests.</p></div>
     </section>
 
     <section id="method" class="section wrap" aria-labelledby="method-title">
-      <div class="section-heading"><p class="eyebrow">01 / Method</p><h2 id="method-title">Learn the quantizer.<br>Keep the model frozen.</h2></div>
+      <div class="section-heading"><p class="eyebrow">01 / Method</p><h2 id="method-title">Learn from language-model loss.</h2></div>
       <div class="section-body">
-        <p>Most KV quantizers optimize a local reconstruction objective. Beyond instead learns the representation levels <em>R</em> and decision thresholds <em>T</em> from next-token negative log-likelihood. The forward pass uses the same hard quantizer during training and inference.</p>
-        <picture><source media="(max-width: 720px)" srcset="assets/method-mobile.svg" width="390" height="568"><img class="method-diagram" src="assets/method.svg" width="800" height="310" alt="A frozen language model produces keys and values. A hard KV quantizer with learned representation levels R and thresholds T produces quantized states. Next-token loss updates only the quantizer parameters. Serving reads packed 4-bit cache codes with group metadata using a fused attention kernel."></picture>
+        <p>Local KV reconstruction error is only a proxy for generation quality: a cache perturbation passes through attention and the remaining network before it changes a prediction. Beyond learns representation levels <em>R</em> and ordered decision thresholds <em>T</em> directly from next-token negative log-likelihood, while keeping the backbone weights frozen.</p>
+        <picture><source media="(max-width: 720px)" srcset="assets/method-mobile.svg" width="390" height="568"><img class="method-diagram" src="assets/method.svg" width="800" height="310" alt="Frozen model keys and values pass through a hard quantizer with learned levels R and thresholds T, then through frozen attention and the downstream network. Next-token loss updates only R and T. Serving reads packed 4-bit codes and group metadata with a fused attention kernel."></picture>
+        <p>For each 32-value group, normalize with its minimum and scale, assign each value to one of 16 learned levels using 15 interior thresholds, then rescale for attention. Training and inference share the same hard bin assignment.</p>
         <div class="method-details">
-          <div><h3>Loss-aware learning</h3><p>Straight-through and boundary-localized pseudo-gradients update the quantizer parameters, with no backbone-weight updates.</p></div>
-          <div><h3>Packed-cache serving</h3><p>A fused CuTe decode kernel reads packed 4-bit codes and reconstructs K/V in registers. vLLM retains scheduling and paged cache management.</p></div>
+          <div><h3>Hard forward, loss-driven updates</h3><p>Identity straight-through input gradients and boundary-localized threshold pseudo-gradients enable learning. Only the quantizer parameters are updated.</p></div>
+          <div><h3>What fits in the cache</h3><p>Each group stores 128 code bits plus 32 min/scale metadata bits: 5.0 effective bits per scalar, or 3.2× payload compression relative to 16-bit KV, before page padding.</p></div>
         </div>
-        <p class="source-note">Method: Sections 3.2–3.3. Storage accounting: Appendix F. The default configuration uses 4-bit codes and groups of 32.</p>
+        <p class="source-note">Payload compression is not a claim of 3.2× lower total GPU memory: model weights, workspaces, and cache-allocation overhead are separate.</p>
       </div>
     </section>
 
     <section id="results" class="section results-section wrap" aria-labelledby="results-title">
-      <div class="section-heading"><p class="eyebrow">02 / Results</p><h2 id="results-title">Quality and efficiency,<br>measured separately.</h2></div>
+      <div class="section-heading"><p class="eyebrow">02 / Quality</p><h2 id="results-title">Beyond the full-precision baseline.</h2></div>
       <div class="section-body">
-        <p>The paper evaluates three instruction-tuned models, spanning dense and MoE backbones. Beyond improves held-out Pile perplexity relative to Native and obtains the highest LongBench Avg21 among the four main compared methods for each model.</p>
+        <p>Quantizer-only training lowers held-out Pile perplexity on all three tested instruction-tuned models. On LongBench, Beyond achieves the highest Avg21 among Native, KV-FP8, TurboQuant, and Beyond for each model.</p>
         <div class="table-wrap" tabindex="0" role="region" aria-label="Model quality results; scroll horizontally on narrow screens">
           <table>
-            <caption>Selected quality results · Tables 1 and 3</caption>
-            <thead><tr><th scope="col">Model</th><th scope="col">Pile PPL reduction<br><span>vs. Native</span></th><th scope="col">LongBench<br><span>Avg21 ↑</span></th><th scope="col">Avg21 gain<br><span>vs. Native</span></th></tr></thead>
+            <caption>Final poster results · Native → Beyond · 4-bit codes, group size 32</caption>
+            <thead><tr><th scope="col">Model</th><th scope="col">Pile PPL ↓<br><span>Native → Beyond</span></th><th scope="col">PPL reduction</th><th scope="col">LongBench Avg21 ↑<br><span>Native → Beyond</span></th><th scope="col">Avg21 gain</th></tr></thead>
             <tbody>
-              <tr><th scope="row">Llama-3.1-8B-Instruct</th><td>2.2%</td><td class="result-value">44.9</td><td>+1.5 points</td></tr>
-              <tr><th scope="row">Ministral-3-14B-Instruct-2512-BF16</th><td>2.8%</td><td class="result-value">47.4</td><td>+2.0 points</td></tr>
-              <tr><th scope="row">Qwen3-30B-A3B-Instruct-2507</th><td>7.0%</td><td class="result-value">50.2</td><td>+1.7 points</td></tr>
+              <tr><th scope="row">Llama-3.1-8B-Instruct</th><td>5.50 → <strong>5.38</strong></td><td>2.2%</td><td>43.4 → <strong class="result-value">44.9</strong></td><td>+1.5 points</td></tr>
+              <tr><th scope="row">Ministral-3-14B-Instruct-2512-BF16</th><td>6.77 → <strong>6.58</strong></td><td>2.8%</td><td>45.4 → <strong class="result-value">47.4</strong></td><td>+2.0 points</td></tr>
+              <tr><th scope="row">Qwen3-30B-A3B-Instruct-2507</th><td>5.31 → <strong>4.94</strong></td><td>6.9%</td><td>48.5 → <strong class="result-value">50.2</strong></td><td>+1.7 points</td></tr>
             </tbody>
           </table>
         </div>
-        <p class="source-note">Main comparisons: Native, KV-FP8, TurboQuant-KV4, and Beyond. These methods use different effective cache budgets; Appendix E.4 adds roughly matched-bit controls. Scores above follow the rounded values reported in Section 4.2.</p>
-        <div class="measurement-note">
-          <h3>What the speedups measure</h3>
-          <p><strong>Kernel:</strong> batches 1 and 16 over 1K–128K contexts, after 50 warmups and 500 CUDA-graph replays. <strong>Serving:</strong> the official vLLM offline driver, 1024-token prompts, 128 generated tokens, an 8192-token scheduling budget, the same BF16 backbone, and prefix caching disabled. The two speedups refer to different measurements.</p>
-          <a class="text-link" href="paper/Beyond.pdf#page=9">See deployment results in Figure 7</a>
+        <p class="source-note">Perplexity uses 150 disjoint held-out Pile evaluation chunks. Avg21 is the unweighted mean over 21 LongBench-v1 tasks. Values and relative reductions follow the final poster; percentages are not recomputed from the displayed, rounded PPL values.</p>
+        <p class="source-note">Gains are task-dependent, not improvements on every individual benchmark. The compared methods use different effective cache budgets; the paper provides additional roughly matched-bit and adaptation controls.</p>
+      </div>
+    </section>
+
+    <section id="serving" class="section wrap" aria-labelledby="serving-title">
+      <div class="section-heading"><p class="eyebrow">03 / Packed execution</p><h2 id="serving-title">From compressed KV<br> to faster decoding.</h2></div>
+      <div class="section-body">
+        <p>A fused CuTe decode kernel reads packed codes and combines level lookup, affine rescaling, attention scoring, online softmax, and value accumulation. The vLLM integration measures how this kernel translates into end-to-end serving.</p>
+        <div class="method-details">
+          <div><h3>1.50× peak kernel speedup</h3><p>Versus FlashAttention-4 on one NVIDIA B300, using Llama-3.1-8B-Instruct geometry. The poster shows all 16 measured context/batch pairs.</p></div>
+          <div><h3>1.17× peak serving throughput</h3><p>Versus the FA4 vLLM path at batch 1536. Tested batch capacity increases from 1582 to at least 4500: at least 2.84×.</p></div>
         </div>
-        <p class="source-note">Gains vary by task and model. Improvements over the unmodified model do not imply a uniform capability gain; the paper reports task regressions and additional adaptation controls.</p>
+        <div class="measurement-note">
+          <h3>Two measurements, two scopes</h3>
+          <p><strong>Kernel-only:</strong> batches 1 and 16, 1K–128K contexts, 50 warmups, and 500 CUDA-graph replays. Speedup is FA4 latency divided by Beyond latency.</p>
+          <p><strong>End-to-end:</strong> Llama-3.1-8B-Instruct in BF16 on one B300; the official vLLM throughput benchmark with cold 1024-token prompts plus 128 generated tokens, an 8192-token scheduling budget, prefix caching off, and GPU-memory fraction 0.90.</p>
+          <p><strong>Capacity:</strong> the first tested KV-capacity failures occur at 1583 for FA4 and 4800 for Beyond. Batch 4500 is a verified working point, not an exact maximum for Beyond.</p>
+          <a class="text-link" href="poster/EMNLP2026_Beyond_Poster.pdf">See both performance plots in the final poster</a>
+        </div>
+        <p class="source-note"><strong>Evidence boundaries.</strong> Quality evaluation uses training-equivalent fake quantize/dequantize (fake-QDQ) with a floating-point cache. Real cache compression and serving measurements use the packed backend. These are separate experiments, and kernel speedup is not end-to-end throughput gain.</p>
       </div>
     </section>
   </main>
-  <footer class="wrap"><span class="footer-name">Beyond.</span><span>Yuhao Xie · Mingjie Lin <span aria-hidden="true">/</span> University of Central Florida</span><a href="paper/Beyond.pdf">Read the paper</a></footer>
+  <footer class="wrap"><span class="footer-name">Beyond.</span><span>Yuhao Xie · Mingjie Lin <span aria-hidden="true">/</span> University of Central Florida</span><span class="contacts">Contact: <a href="mailto:yu805059@ucf.edu">yu805059@ucf.edu</a> · Correspondence: <a href="mailto:milin@ucf.edu">milin@ucf.edu</a></span><a href="poster/EMNLP2026_Beyond_Poster.pdf">Conference poster</a></footer>
 </body>
 </html>
